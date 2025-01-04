@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Futuristic Pantaloons Tracker with Scrollable Filters & Items-Per-Page</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      const fallbackImage = "./404w.png"; // Demo fallback image
+      const setFallback = (img) => {
+        img.onerror = function() {
+          this.onerror = null; // Prevents infinite loops
+          this.src = fallbackImage; // Set fallback image
+        };
+      };
+
+      // Apply fallback to existing images
+      document.querySelectorAll("img").forEach(setFallback);
+
+      // Observe dynamically added images
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+          mutation.addedNodes.forEach(node => {
+            if (node.tagName === 'IMG') {
+              setFallback(node);
+            } else if (node.querySelectorAll) {
+              node.querySelectorAll("img").forEach(setFallback);
+            }
+          });
+        });
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+  </script>
+
+  <style>
+    body {
+      background-color: #18181b; /* near-black */
+      color: #e5e7eb;            /* zinc-200 */
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #27272a; 
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: #52525b; 
+      border-radius: 4px;
+    }
+    .hover-futuristic:hover {
+      box-shadow: 0 0 20px rgba(13,148,136,0.3); /* teal glow */
+      transition: box-shadow 0.3s ease;
+    }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0,0,0,0.6);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    .modal.open {
+      display: flex;
+    }
+    /* Frosted glass style for modal content */
+    .modal-content {
+      background: rgba(36,36,40, 0.95);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+  </style>
+</head>
+
+<body class="flex flex-col min-h-screen">
+
+  <!-- HEADER -->
+  <header class="bg-zinc-900 p-4 border-b border-zinc-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow">
+    <h1 class="text-xl md:text-2xl font-bold tracking-widest text-teal-400 uppercase">
+      Pantaloons Futuristic Tracker
+    </h1>
+    <!-- Search + Sort + ItemsPerPage -->
+    <div class="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto">
+      <!-- Search -->
+      <div class="relative">
+        <input 
+          id="searchInput" 
+          type="text" 
+          placeholder="Search brand / productId / style code..."
+          class="w-full md:w-72 px-3 py-2 rounded bg-zinc-800 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+        />
+        <button 
+          id="clearSearch"
+          class="absolute right-2 top-2 text-zinc-500 hover:text-zinc-200 text-sm"
+          title="Clear Search"
+        >✕</button>
+      </div>
+      <!-- Sort Dropdown -->
+      <select 
+        id="sortSelect" 
+        class="px-3 py-2 rounded bg-zinc-800 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+      >
+        <option value="">Sort by...</option>
+        <option value="priceAsc">Price: Low → High</option>
+        <option value="priceDesc">Price: High → Low</option>
+        <option value="discountAsc">Discount: Low → High</option>
+        <option value="discountDesc">Discount: High → Low</option>
+        <option value="nameAsc">Name: A → Z</option>
+        <option value="nameDesc">Name: Z → A</option>
+        <option value="newest">Newest Products</option>
+        <option value="ordersCount">Most Ordered</option>
+        <option value="productViews">Most Viewed</option>
+        <option value="productIdAsc">Product ID Asc</option>
+        <option value="productIdDesc">Product ID Desc</option>
+      </select>
+      <!-- Items Per Page Dropdown -->
+      <select 
+        id="itemsPerPageSelect" 
+        class="px-3 py-2 rounded bg-zinc-800 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+      >
+        <option value="8">8 per page</option>
+        <option value="12">12 per page</option>
+        <option value="16">16 per page</option>
+        <option value="24">24 per page</option>
+        <option value="32">32 per page</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <div class="flex flex-1">
+
+    <!-- FILTER SIDEBAR -->
+    <aside class="hidden md:block w-64 bg-zinc-900 border-r border-zinc-800 p-4 overflow-y-auto">
+      <h2 class="text-lg font-semibold mb-4 text-teal-400">Filters</h2>
+
+      <!-- Brand Checklist (scrollable) -->
+      <!-- Brand Checklist (scrollable) -->
+      <div class="mb-6">
+        <p class="font-medium text-zinc-300 mb-2">Brands</p>
+        <!-- Search Bar for Brands -->
+        <div class="relative mb-3">
+          <input 
+            id="brandSearchInput" 
+            type="text" 
+            placeholder="Search brands..." 
+            class="w-full px-3 py-2 rounded bg-zinc-800 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+          />
+        </div>
+        <div 
+          id="brandChecklist" 
+          class="space-y-1 max-h-64 overflow-y-auto custom-scroll"
+        ></div>
+      </div>
+
+
+      <!-- Sizes checklist (scrollable) -->
+      <div class="mb-6">
+        <p class="font-medium text-zinc-300 mb-2">Sizes</p>
+        <div 
+          id="sizeChecklist" 
+          class="space-y-1 max-h-32 overflow-y-auto custom-scroll"
+        ></div>
+      </div>
+
+      <!-- Categories checklist (scrollable) -->
+      <div class="mb-6">
+        <p class="font-medium text-zinc-300 mb-2">Categories</p>
+        <div 
+          id="categoryChecklist" 
+          class="space-y-1 max-h-32 overflow-y-auto custom-scroll"
+        ></div>
+      </div>
+
+      <!-- Gender checklist (scrollable) -->
+      <div class="mb-6">
+        <p class="font-medium text-zinc-300 mb-2">Genders</p>
+        <div 
+          id="genderChecklist" 
+          class="space-y-1 max-h-24 overflow-y-auto custom-scroll"
+        ></div>
+      </div>
+
+      <!-- Occasion checklist (scrollable) -->
+      <div class="mb-6">
+        <p class="font-medium text-zinc-300 mb-2">Occasions</p>
+        <div 
+          id="occasionChecklist" 
+          class="space-y-1 max-h-24 overflow-y-auto custom-scroll"
+        ></div>
+      </div>
+    </aside>
+
+    <!-- PRODUCTS GRID -->
+    <main class="flex-1 p-4 overflow-y-auto">
+      <div 
+        id="productsGrid" 
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+      >
+        <!-- Insert dynamic product cards -->
+      </div>
+
+      <!-- PAGINATION -->
+      <div class="mt-8 flex items-center justify-center gap-4">
+        <button 
+          id="prevPageBtn"
+          class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-700 disabled:text-zinc-500 rounded"
+          disabled
+        >
+          Prev
+        </button>
+        <button 
+          id="nextPageBtn"
+          class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-700 disabled:text-zinc-500 rounded"
+          disabled
+        >
+          Next
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="bg-zinc-900 border-t border-zinc-800 p-4 text-center text-xs text-zinc-500">
+    Last Update: <span id="lastUpdate" class="font-medium text-zinc-300"></span>
+  </footer>
+
+  <!-- PRODUCT DETAILS MODAL -->
+  <div id="productModal" class="modal">
+    <div 
+      class="modal-content p-6 rounded shadow-2xl max-w-5xl w-full mx-4 overflow-y-auto"
+      style="max-height: 90vh;"
+    >
+      <button 
+        id="closeModalBtn"
+        class="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 text-2xl"
+      >&times;</button>
+
+      <!-- Modal Body -->
+      <div class="flex flex-col md:flex-row gap-6">
+        
+        <!-- Left Column: Images & Chart -->
+        <div class="md:w-1/2 flex flex-col gap-4">
+          <img 
+            id="mainImage"
+            src="https://via.placeholder.com/400x500?text=Loading..."
+            alt="Product"
+            class="w-full h-80 object-cover rounded border border-zinc-800"
+          />
+          <!-- Thumbnails container -->
+          <div id="thumbnails" class="flex gap-2 overflow-x-auto"></div>
+          <!-- Price History Chart -->
+          <div class="bg-zinc-800 p-2 rounded border border-zinc-700">
+            <canvas id="priceChart" width="400" height="200"></canvas>
+          </div>
+        </div>
+
+        <!-- Right Column: Product Info -->
+        <div class="md:w-1/2 flex flex-col gap-4">
+          <!-- Title row -->
+          <div>
+            <h2 
+              id="modalProductName"
+              class="text-xl font-bold text-teal-400 mb-1"
+            ></h2>
+            <p class="text-xs text-zinc-500">
+              Brand: <span id="modalBrand" class="text-zinc-300"></span> 
+              | StyleCode: <span id="modalStyleCode"></span>
+              | ID: <span id="modalProductId"></span>
+            </p>
+          </div>
+
+          <!-- Basic attributes row -->
+          <div class="grid grid-cols-2 gap-2 text-sm text-zinc-300">
+            <div><strong>Gender:</strong> <span id="modalGender"></span></div>
+            <div><strong>Occasion:</strong> <span id="modalOccasion"></span></div>
+            <div><strong>Category:</strong> <span id="modalCategory"></span></div>
+            <div><strong>Pattern:</strong> <span id="modalPattern"></span></div>
+            <div><strong>Fit:</strong> <span id="modalFit"></span></div>
+            <div><strong>Color:</strong> <span id="modalColor"></span></div>
+            <div><strong>Color Hex:</strong> <span id="modalColorHex"></span></div>
+          </div>
+
+          <!-- Price row -->
+          <div class="flex items-center gap-4 text-lg">
+            <div>
+              <span id="modalOriginalPrice" class="line-through text-zinc-500 hidden"></span>
+              <span id="modalSellingPrice" class="font-bold text-lime-400"></span>
+            </div>
+            <div>
+              <span 
+                id="modalDiscountBadge"
+                class="bg-pink-600 text-white px-2 py-1 text-sm rounded hidden"
+              ></span>
+            </div>
+          </div>
+
+          <!-- Stats row (quantity, orders, views) -->
+          <div class="flex flex-wrap gap-4 text-sm text-zinc-400">
+            <p><strong>Qty:</strong> <span id="modalQuantity"></span></p>
+            <p><strong>Orders:</strong> <span id="modalOrdersCount"></span></p>
+            <p><strong>Views:</strong> <span id="modalProductViews"></span></p>
+          </div>
+
+          <!-- Features -->
+          <div class="bg-zinc-800 p-3 rounded border border-zinc-700 text-sm text-zinc-200">
+            <p class="mb-2 text-teal-300 font-semibold">Features & Highlights</p>
+            <div id="modalFeatures" class="space-y-1">
+              <!-- dynamic -->
+            </div>
+          </div>
+
+          <!-- Sizes table -->
+          <div class="bg-zinc-800 p-3 rounded border border-zinc-700 text-sm text-zinc-200 overflow-x-auto">
+            <p class="mb-2 text-teal-300 font-semibold">Sizes & Their Pricing</p>
+            <table class="min-w-full text-left border-collapse">
+              <thead class="border-b border-zinc-700 text-zinc-400">
+                <tr>
+                  <th class="py-1 px-2">Size</th>
+                  <th class="py-1 px-2">MRP</th>
+                  <th class="py-1 px-2">SP</th>
+                  <th class="py-1 px-2">Disc%</th>
+                  <th class="py-1 px-2">Qty</th>
+                </tr>
+              </thead>
+              <tbody id="modalSizes"></tbody>
+            </table>
+          </div>
+
+          <!-- CTA Button -->
+          <button
+            class="mt-auto py-2 px-4 bg-teal-600 hover:bg-teal-500 text-white rounded text-sm self-end"
+          >
+            Add to Cart (Demo)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script>
+    /* 
+     * We'll fetch data_store.json to populate allProducts
+     * Then apply filters, sort, pagination, etc.
+     */
+
+    let allProducts = [];
+    let filteredProducts = [];
+    
+    // The user can pick items per page from the dropdown
+    let itemsPerPage = 8;
+    let currentPage = 1;
+    let priceChart = null;
+
+    // DOM references
+    const productsGrid = document.getElementById('productsGrid');
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    const prevPageBtn = document.getElementById('prevPageBtn');
+    const nextPageBtn = document.getElementById('nextPageBtn');
+    const searchInput = document.getElementById('searchInput');
+    const clearSearch = document.getElementById('clearSearch');
+    const sortSelect = document.getElementById('sortSelect');
+    const itemsPerPageSelect = document.getElementById('itemsPerPageSelect');
+
+    // Checklists
+    const brandChecklist = document.getElementById('brandChecklist');
+    const sizeChecklist = document.getElementById('sizeChecklist');
+    const categoryChecklist = document.getElementById('categoryChecklist');
+    const genderChecklist = document.getElementById('genderChecklist');
+    const occasionChecklist = document.getElementById('occasionChecklist');
+
+    // Modal
+    const productModal = document.getElementById('productModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    // Modal fields
+    const mainImage = document.getElementById('mainImage');
+    const thumbnailsDiv = document.getElementById('thumbnails');
+    const priceChartCanvas = document.getElementById('priceChart');
+    const modalProductName = document.getElementById('modalProductName');
+    const modalBrand = document.getElementById('modalBrand');
+    const modalStyleCode = document.getElementById('modalStyleCode');
+    const modalProductId = document.getElementById('modalProductId');
+    const modalGender = document.getElementById('modalGender');
+    const modalOccasion = document.getElementById('modalOccasion');
+    const modalCategory = document.getElementById('modalCategory');
+    const modalPattern = document.getElementById('modalPattern');
+    const modalFit = document.getElementById('modalFit');
+    const modalColor = document.getElementById('modalColor');
+    const modalColorHex = document.getElementById('modalColorHex');
+    const modalOriginalPrice = document.getElementById('modalOriginalPrice');
+    const modalSellingPrice = document.getElementById('modalSellingPrice');
+    const modalDiscountBadge = document.getElementById('modalDiscountBadge');
+    const modalQuantity = document.getElementById('modalQuantity');
+    const modalOrdersCount = document.getElementById('modalOrdersCount');
+    const modalProductViews = document.getElementById('modalProductViews');
+    const modalFeatures = document.getElementById('modalFeatures');
+    const modalSizes = document.getElementById('modalSizes');
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      const data = await fetchDataStore();
+      if (!data) {
+        console.error("No data found in data_store.json");
+        return;
+      }
+      allProducts = data.products || [];
+      lastUpdateEl.textContent = new Date(data.lastUpdate).toLocaleString();
+
+      // Build checklists
+      buildBrandChecklist(allProducts);
+      buildSizeChecklist(allProducts);
+      buildCategoryChecklist(allProducts);
+      buildGenderChecklist(allProducts);
+      buildOccasionChecklist(allProducts);
+
+      // Render initial page
+      updateProducts();
+    });
+
+    async function fetchDataStore() {
+      try {
+        const { protocol, hostname, port } = window.location;
+        const dataURL = `${protocol}//${hostname}:${port}/data_store.json`;
+        const resp = await fetch(dataURL);
+        if (!resp.ok) throw new Error("Failed to load data_store.json");
+        return await resp.json();
+      } catch (err) {
+        console.error(err);
+        return null;
+      }
+    }
+
+    // Build checklists
+    function buildBrandChecklist(products) {
+      const brandSet = new Set();
+      products.forEach(p => {
+        if (p.brand) brandSet.add(p.brand);
+      });
+      const sorted = Array.from(brandSet).sort();
+      sorted.forEach(br => {
+        const div = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = br;
+        input.className = 'mr-2 accent-teal-500';
+        input.addEventListener('change', onChecklistChange);
+        const label = document.createElement('label');
+        label.textContent = br;
+        div.appendChild(input);
+        div.appendChild(label);
+        brandChecklist.appendChild(div);
+      });
+    }
+    function buildSizeChecklist(products) {
+      const sizeSet = new Set();
+      products.forEach(p => {
+        (p.sizes || []).forEach(sz => {
+          if (sz.name) sizeSet.add(sz.name);
+        });
+      });
+      const sorted = Array.from(sizeSet).sort();
+      sorted.forEach(s => {
+        const div = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = s;
+        input.className = 'mr-2 accent-teal-500';
+        input.addEventListener('change', onChecklistChange);
+        const label = document.createElement('label');
+        label.textContent = s;
+        div.appendChild(input);
+        div.appendChild(label);
+        sizeChecklist.appendChild(div);
+      });
+    }
+    function buildCategoryChecklist(products) {
+      const catSet = new Set();
+      products.forEach(p => {
+        if (p.defaultCategoryName) catSet.add(p.defaultCategoryName);
+      });
+      const sorted = Array.from(catSet).sort();
+      sorted.forEach(c => {
+        const div = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = c;
+        input.className = 'mr-2 accent-teal-500';
+        input.addEventListener('change', onChecklistChange);
+        const label = document.createElement('label');
+        label.textContent = c;
+        div.appendChild(input);
+        div.appendChild(label);
+        categoryChecklist.appendChild(div);
+      });
+    }
+    function buildGenderChecklist(products) {
+      const gSet = new Set();
+      products.forEach(p => {
+        if (p.gender) gSet.add(p.gender);
+      });
+      const sorted = Array.from(gSet).sort();
+      sorted.forEach(g => {
+        const div = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = g;
+        input.className = 'mr-2 accent-teal-500';
+        input.addEventListener('change', onChecklistChange);
+        const label = document.createElement('label');
+        label.textContent = g;
+        div.appendChild(input);
+        div.appendChild(label);
+        genderChecklist.appendChild(div);
+      });
+    }
+    function buildOccasionChecklist(products) {
+      const oSet = new Set();
+      products.forEach(p => {
+        if (p.occasion) oSet.add(p.occasion);
+      });
+      const sorted = Array.from(oSet).sort();
+      sorted.forEach(o => {
+        const div = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = o;
+        input.className = 'mr-2 accent-teal-500';
+        input.addEventListener('change', onChecklistChange);
+        const label = document.createElement('label');
+        label.textContent = o;
+        div.appendChild(input);
+        div.appendChild(label);
+        occasionChecklist.appendChild(div);
+      });
+    }
+    function onChecklistChange() {
+      currentPage = 1;
+      updateProducts();
+    }
+
+    // Items per page
+    itemsPerPageSelect.addEventListener('change', () => {
+      itemsPerPage = parseInt(itemsPerPageSelect.value, 10);
+      currentPage = 1;
+      updateProducts();
+    });
+
+    // Search & Sort
+    searchInput.addEventListener('input', () => {
+      currentPage = 1;
+      updateProducts();
+    });
+    clearSearch.addEventListener('click', () => {
+      searchInput.value = '';
+      currentPage = 1;
+      updateProducts();
+    });
+    sortSelect.addEventListener('change', () => {
+      currentPage = 1;
+      updateProducts();
+    });
+
+    // Pagination
+    prevPageBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        updateProducts();
+      }
+    });
+    nextPageBtn.addEventListener('click', () => {
+      currentPage++;
+      updateProducts();
+    });
+
+    // The main update function
+    function updateProducts() {
+      filteredProducts = applyAllFiltersAndSearch(allProducts);
+      updatePaginationButtons(filteredProducts.length);
+      const pageData = getPaginatedData(filteredProducts, currentPage, itemsPerPage);
+      renderProductsGrid(pageData);
+    }
+
+    function applyAllFiltersAndSearch(products) {
+      let temp = [...products];
+
+      // get checked from each container
+      const brandVals = getCheckedValues(brandChecklist);
+      if (brandVals.length) {
+        temp = temp.filter(p => brandVals.includes(p.brand));
+      }
+      const sizeVals = getCheckedValues(sizeChecklist);
+      if (sizeVals.length) {
+        temp = temp.filter(p => p.sizes.some(sz => sizeVals.includes(sz.name)));
+      }
+      const catVals = getCheckedValues(categoryChecklist);
+      if (catVals.length) {
+        temp = temp.filter(p => catVals.includes(p.defaultCategoryName));
+      }
+      const genderVals = getCheckedValues(genderChecklist);
+      if (genderVals.length) {
+        temp = temp.filter(p => genderVals.includes(p.gender));
+      }
+      const occVals = getCheckedValues(occasionChecklist);
+      if (occVals.length) {
+        temp = temp.filter(p => occVals.includes(p.occasion));
+      }
+
+      // search
+      const sVal = searchInput.value.trim().toLowerCase();
+      if (sVal) {
+        temp = temp.filter(p => {
+          const brand = (p.brand||'').toLowerCase();
+          const name = (p.name||'').toLowerCase();
+          const styleCode = (p.styleCode||'').toLowerCase();
+          const idStr = String(p.productId);
+          return (
+            brand.includes(sVal) ||
+            name.includes(sVal) ||
+            styleCode.includes(sVal) ||
+            idStr.includes(sVal)
+          );
+        });
+      }
+
+      // sort
+      if (sortSelect.value) {
+        temp = sortProducts(temp, sortSelect.value);
+      }
+
+      return temp;
+    }
+
+    function getCheckedValues(container) {
+      const checks = container.querySelectorAll('input[type="checkbox"]:checked');
+      return Array.from(checks).map(c => c.value);
+    }
+
+    function sortProducts(prod, sVal) {
+      return prod.sort((a,b) => {
+        switch (sVal) {
+          case 'priceAsc': return a.sellingPrice - b.sellingPrice;
+          case 'priceDesc': return b.sellingPrice - a.sellingPrice;
+          case 'discountAsc': return a.discountAmount - b.discountAmount;
+          case 'discountDesc': return b.discountAmount - a.discountAmount;
+          case 'nameAsc': return a.name.localeCompare(b.name);
+          case 'nameDesc': return b.name.localeCompare(a.name);
+          case 'newest': return new Date(b.createdAt) - new Date(a.createdAt);
+          case 'ordersCount': return b.ordersCount - a.ordersCount;
+          case 'productViews': return b.productViews - a.productViews;
+          case 'productIdAsc': return a.productId - b.productId;
+          case 'productIdDesc': return b.productId - a.productId;
+          default: return 0;
+        }
+      });
+    }
+
+    function getPaginatedData(arr, page, limit) {
+      const start = (page-1)*limit;
+      return arr.slice(start, start+limit);
+    }
+
+    function updatePaginationButtons(totalCount) {
+      const maxPage = Math.ceil(totalCount / itemsPerPage);
+      prevPageBtn.disabled = (currentPage <= 1);
+      nextPageBtn.disabled = (currentPage >= maxPage);
+    }
+
+    function renderProductsGrid(products) {
+      productsGrid.innerHTML = '';
+      if (!products.length) {
+        productsGrid.innerHTML = '<p class="col-span-full text-center text-zinc-500">No products found.</p>';
+        return;
+      }
+      products.forEach(product => {
+        const {
+          productId, name, brand, defaultCategoryName, occasion, price, sellingPrice,
+          discountAmount, images, quantity, ordersCount, productViews
+        } = product;
+
+        let imgUrl = 'https://via.placeholder.com/300x400?text=No+Image';
+        if (images && images.length>0) {
+          imgUrl = images[0].url;
+        }
+
+        // Price logic
+        let priceHTML = '';
+        if (discountAmount>0 && sellingPrice<price) {
+          priceHTML = `
+            <span class="text-sm line-through text-zinc-400 mr-2">Rs. ${price}</span>
+            <span class="text-md font-bold text-lime-400">Rs. ${sellingPrice}</span>
+          `;
+        } else {
+          const c = (sellingPrice>price)? 'text-pink-500':'text-lime-400';
+          priceHTML = `<span class="text-md font-bold ${c}">Rs. ${sellingPrice}</span>`;
+        }
+
+        const card = document.createElement('div');
+        card.className =
+          'bg-zinc-900 rounded border border-zinc-700 shadow hover-futuristic flex flex-col cursor-pointer';
+
+        const discountBadge = (discountAmount>0)
+          ? `<div class="absolute top-2 right-2 bg-pink-600 text-white text-xs px-2 py-1 rounded">${discountAmount}% OFF</div>`
+          : '';
+
+        card.innerHTML = `
+          <div class="relative w-full h-60 overflow-hidden rounded-t">
+            <img src="${imgUrl}" alt="${name}" class="w-full h-full object-cover"/>
+            ${discountBadge}
+          </div>
+          <div class="p-4 flex flex-col flex-1">
+            <h3 class="text-sm font-semibold mb-1 line-clamp-2 text-teal-300">${name}</h3>
+            <p class="text-xs text-zinc-500 mb-3">
+              ${brand} | ${defaultCategoryName}${occasion ? ' | '+occasion : ''}
+            </p>
+            <div class="mb-2">
+              ${priceHTML}
+            </div>
+            <div class="text-xs text-zinc-400 flex flex-wrap gap-2">
+              <p>Qty: ${quantity}</p>
+              <p>Orders: ${ordersCount}</p>
+              <p>Views: ${productViews}</p>
+            </div>
+            <div class="mt-auto"></div>
+          </div>
+        `;
+        card.addEventListener('click', () => openProductModal(productId));
+        productsGrid.appendChild(card);
+      });
+    }
+
+    // OPEN MODAL
+    function openProductModal(pid) {
+      const product = allProducts.find(p => p.productId === pid);
+      if (!product) return;
+
+      // fill fields
+      modalProductName.textContent = product.name || '';
+      modalBrand.textContent = product.brand || '';
+      modalStyleCode.textContent = product.styleCode || '';
+      modalProductId.textContent = product.productId || '';
+      modalGender.textContent = product.gender || '';
+      modalOccasion.textContent = product.occasion || '';
+      modalCategory.textContent = product.defaultCategoryName || '';
+      modalPattern.textContent = product.pattern || '';
+      modalFit.textContent = product.fit || '';
+      modalColor.textContent = product.color || '';
+      modalColorHex.textContent = product.colorHex || '';
+
+      // Price
+      if (product.discountAmount>0 && product.sellingPrice<product.price) {
+        modalOriginalPrice.textContent = `Rs. ${product.price}`;
+        modalOriginalPrice.classList.remove('hidden');
+        modalSellingPrice.textContent = `Rs. ${product.sellingPrice}`;
+        modalSellingPrice.classList.remove('text-pink-500','text-lime-400');
+        modalSellingPrice.classList.add('text-lime-400');
+        modalDiscountBadge.textContent = `${product.discountAmount}% OFF`;
+        modalDiscountBadge.classList.remove('hidden');
+      } else {
+        modalOriginalPrice.classList.add('hidden');
+        modalSellingPrice.textContent = `Rs. ${product.sellingPrice}`;
+        modalSellingPrice.classList.remove('text-pink-500','text-lime-400');
+        if (product.sellingPrice> product.price) {
+          modalSellingPrice.classList.add('text-pink-500');
+        } else {
+          modalSellingPrice.classList.add('text-lime-400');
+        }
+        modalDiscountBadge.classList.add('hidden');
+      }
+
+      modalQuantity.textContent = product.quantity;
+      modalOrdersCount.textContent = product.ordersCount;
+      modalProductViews.textContent = product.productViews;
+
+      // Features
+      modalFeatures.innerHTML = '';
+      const feats = product.features || {};
+      const fKeys = Object.keys(feats);
+      if (fKeys.length) {
+        fKeys.forEach(k => {
+          const row = document.createElement('div');
+          row.textContent = `${k}: ${feats[k]}`;
+          modalFeatures.appendChild(row);
+        });
+      } else {
+        modalFeatures.textContent = 'No special features.';
+      }
+
+      // Sizes
+      modalSizes.innerHTML = '';
+      if (product.sizes && product.sizes.length) {
+        product.sizes.forEach(sz => {
+          const dAmt = sz.discount?.amount || 0;
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td class="py-1 px-2 border-b border-zinc-700">${sz.name}</td>
+            <td class="py-1 px-2 border-b border-zinc-700">Rs. ${sz.price}</td>
+            <td class="py-1 px-2 border-b border-zinc-700">Rs. ${sz.sellingPrice}</td>
+            <td class="py-1 px-2 border-b border-zinc-700">${dAmt}%</td>
+            <td class="py-1 px-2 border-b border-zinc-700">${sz.quantity}</td>
+          `;
+          modalSizes.appendChild(row);
+        });
+      } else {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td colspan="5" class="text-center text-zinc-500 py-2">No sizes found.</td>`;
+        modalSizes.appendChild(row);
+      }
+
+      // images
+      if (product.images && product.images.length>0) {
+        mainImage.src = product.images[0].url;
+        thumbnailsDiv.innerHTML = '';
+        product.images.forEach((imgObj, idx) => {
+          const thumb = document.createElement('img');
+          thumb.src = imgObj.url;
+          thumb.alt = 'thumb'+idx;
+          thumb.className = 'w-16 h-16 object-cover border border-zinc-700 rounded cursor-pointer hover:border-teal-400';
+          thumb.addEventListener('click', () => {
+            mainImage.src = imgObj.url;
+          });
+          thumbnailsDiv.appendChild(thumb);
+        });
+      } else {
+        mainImage.src = 'https://via.placeholder.com/400x500?text=No+Image';
+        thumbnailsDiv.innerHTML = '';
+      }
+
+      // build chart
+      buildPriceChart(product);
+
+      // show modal
+      productModal.classList.add('open');
+    }
+
+    function buildPriceChart(product) {
+      const hist = product.productHistory || [];
+      if (!hist.length) {
+        if (priceChart) priceChart.destroy();
+        const ctx = priceChartCanvas.getContext('2d');
+        ctx.clearRect(0,0,400,200);
+        return;
+      }
+      hist.sort((a,b)=> new Date(a.date)- new Date(b.date));
+      const labels = hist.map(h => new Date(h.date).toLocaleDateString());
+      const priceData = hist.map(h => h.price);
+      const spData = hist.map(h => h.sellingPrice);
+      const spColors = hist.map(h => (h.sellingPrice< h.price? '#10b981' : '#ef4444'));
+
+      if (priceChart) {
+        priceChart.destroy();
+      }
+      const ctx = priceChartCanvas.getContext('2d');
+      priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Price',
+              data: priceData,
+              borderColor: '#6366f1', // indigo
+              backgroundColor: 'rgba(99,102,241,0.1)',
+              fill: false,
+              tension: 0,
+              pointRadius: 5,
+              pointBackgroundColor: '#6366f1'
+            },
+            {
+              label: 'Selling Price',
+              data: spData,
+              borderColor: spColors[spColors.length-1],
+              backgroundColor: 'rgba(16,185,129,0.1)',
+              fill: false,
+              tension: 0,
+              pointRadius: 5,
+              pointBackgroundColor: spColors
+            }
+          ]
+        },
+        options: {
+          scales: {
+            x: {
+              ticks: { color:'#e5e7eb' },
+              grid: { color: 'rgba(255,255,255,0.1)' }
+            },
+            y: {
+              ticks: { color:'#e5e7eb' },
+              grid: { color: 'rgba(255,255,255,0.1)' }
+            }
+          },
+          plugins: {
+            legend: { labels: { color:'#e5e7eb' } }
+          }
+        }
+      });
+    }
+
+    // CLOSE MODAL
+    closeModalBtn.addEventListener('click', () => {
+      productModal.classList.remove('open');
+    });
+    productModal.addEventListener('click', (e) => {
+      if (e.target===productModal) {
+        productModal.classList.remove('open');
+      }
+    });
+
+    const brandSearchInput = document.getElementById('brandSearchInput');
+
+    brandSearchInput.addEventListener('input', () => {
+      const filterText = brandSearchInput.value.toLowerCase();
+      const brandItems = brandChecklist.querySelectorAll('div');
+
+      brandItems.forEach(item => {
+        const label = item.querySelector('label').textContent.toLowerCase();
+        if (label.includes(filterText)) {
+          item.style.display = ''; // Show item
+        } else {
+          item.style.display = 'none'; // Hide item
+        }
+      });
+    });
+
+  </script>
+</body>
+</html>
